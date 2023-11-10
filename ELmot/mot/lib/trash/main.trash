@@ -1,0 +1,452 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dart_amqp/dart_amqp.dart';
+import 'package:flutter/material.dart';
+import 'package:online_trading/module/rabbitmq/connact_server.dart';
+import 'package:online_trading/module/rabbitmq/read_package.dart';
+
+Future<void> main() async {
+  runApp(const MainApp());
+  // String queueName = '';
+  // String routingKey = "*.*.*";
+  // ConnectionSettings settings = ConnectionSettings(
+  //   host: "10.249.250.137",
+  //   port: 5672,
+  //   authProvider: AmqPlainAuthenticator("user", "user"),
+  // );
+  // Client client = Client(settings: settings);
+  // if (client == "") {
+  //   print("GAGAL CONNECT");
+  // }
+  // Channel channel = await client.channel();
+  // Exchange exchange = await channel.exchange("IDX", ExchangeType.TOPIC);
+  // Queue queue = await channel.queue("$queueName").then(
+  //       (Queue queue) => queue.bind(exchange, routingKey),
+  //     );
+  // Consumer consumer = await queue.consume(consumerTag: queue.name);
+  // print("queue.name: ${queue.name}");
+
+  // consumer.listen((AmqpMessage event) {
+  //   print("[X_routingKey] = ${event.routingKey.toString()}");
+  //   final encrpy1 = Uint8List.fromList(event.payload!.toList());
+  //   final encrpyP = Uint16List.view(event.payload!.buffer);
+  //   final encrpyD = String.fromCharCodes(encrpyP);
+  //   GPackage pkg = GPackage(buf: event.payload!.toList(), bufG: encrpy1);
+  //   final signature = ReadPackage(buf: encrpy1).checkSignature();
+  //   final call = ReadPackage(buf: encrpy1);
+
+  //   // final encript = call.getUShort();
+
+  //   int ress = pkg.getInt16();
+  //   int leng = call.pkgLenght();
+
+  //   print("SLEN: $ress");
+
+  //   String buffer = pkg.getString(ress);
+
+  //   print('Buffer: $buffer');
+  //   print('Buffer length: ${buffer.length}');
+
+  //   GPackageE pkgE = GPackageE(buf: encrpy1);
+
+  //   int packageId = pkgE.getPackageId();
+
+  //   print('Package ID: $packageId');
+  //   print("SIGNATURE: $signature");
+  //   // print("encrpt: $encript");
+  //   print("encrpt: $leng");
+
+  //   // print("[X_payload_data_string_mybe]= ${encrpyD.toString()} "); //沕高
+  //   // print("[X_payload_data_Length]= ${encrpyP.length} ");
+  //   // print("[X_payload_data_LengthBit]= ${encrpyP.lengthInBytes} ");
+  //   // print("[X_payload_data]= ${event.payload!.buffer.toString()} ");
+  //   // print("[X_payload]= ${encrpy1} ");
+  // });
+  Connact().srver();
+}
+
+class GPackage {
+  List<int> buf;
+  int readPos = 18;
+  Uint8List bufG;
+
+  GPackage({required this.buf, readPos, required this.bufG});
+
+  String getString(int slen) {
+    if (slen == 0) {
+      return "";
+    }
+    List<int> strBytes = buf.sublist(readPos, readPos + slen);
+    String str = String.fromCharCodes(strBytes);
+    readPos += slen;
+    return str.trim();
+  }
+
+  int getInt16() {
+    int v = ByteData.view(bufG.buffer).getUint16(readPos);
+    readPos += 2;
+    return v;
+  }
+}
+
+class GPackageE {
+  Uint8List buf;
+
+  GPackageE({required this.buf});
+
+  int getPackageId() {
+    Uint8List packageIdBytes = buf.sublist(8, 10); //Get data bit dari 8-10
+    ByteData byteData = packageIdBytes.buffer.asByteData();
+    int packageId = byteData.getUint16(0);
+    return packageId;
+  }
+}
+
+class MainApp extends StatelessWidget {
+  const MainApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Text('Hello World!'),
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+
+
+
+  ValueListenable<bool> connect = ValueNotifier(con);
+  final Client client = Client(settings: Constans.SETTING_CONN);
+  Channel channel = await client.channel();
+
+  switch (connect.value) {
+    case true:
+      print(connect.value);
+
+      if (client == null) {
+        print("FAIL TO CONNECT");
+      }
+
+      Exchange exchange = await channel.exchange(
+        Constans.EXCHANGE_NAME_REALTIME,
+        Constans.EXCHANGE_TYPE_REALTIME,
+      );
+      Queue queue = await channel.queue(Constans.EXCHANGE_NAME_REALTIME).then(
+            (Queue queue) => queue.bind(exchange, Constans.QUEUE_NAME_REALTIME),
+          );
+      Consumer consumer = await queue.consume(consumerTag: queue.name);
+      print("QUEUE_NAME: ${queue.name.toString()}");
+
+      consumer.listen(
+        (AmqpMessage M) {
+          Uint8List UI = Uint8List.view(M.payload!.buffer);
+          getData(UI, M.routingKey.toString());
+          PackageHeaders(buf: UI);
+          print(M.payload);
+        },
+      );
+      print(connect);
+      break;
+    case false:
+      await client.close();
+      print("DISCONNECT: ${client.close().toString()}");
+      break;
+  }
+
+  // return connect;
+
+
+
+  
+
+// List<OrderBookModel> OrderBook(Uint8List buf) {
+//   List<Bid> addDataB = [];
+//   List<Offer> addDataF = [];
+//   ValueNotifier<int> readPos = ValueNotifier(Constans.PACKAGE_HEADER_LENGTH);
+//   ValueNotifier<int> scl =
+//       ValueNotifier(Encrypt().getPackage2Bit(buf, readPos.value));
+//   readPos.value = readPos.value.toInt() + 2;
+//   ValueNotifier<String> sc =
+//       ValueNotifier(Encrypt().getAsciiString(buf, readPos.value, scl.value));
+//   readPos.value = readPos.value + scl.value;
+//   ValueNotifier<int> bl = ValueNotifier(Encrypt().encrypt2(buf, readPos.value));
+//   readPos.value = readPos.value + 2;
+//   ValueNotifier<String> bls =
+//       ValueNotifier(Encrypt().getAsciiString(buf, readPos.value, bl.value));
+//   readPos.value = readPos.value + bl.value;
+//   ValueNotifier<int> Ar = ValueNotifier(Encrypt().encrypt4(buf, readPos.value));
+//   readPos.value = readPos.value + 4;
+//   for (int x = 0; x < Ar.value; x++) {
+//     var encrypt = Encrypt();
+
+//     int addBidPrice() {
+//       int value = encrypt.encrypt4(buf, readPos.value);
+//       readPos.value = readPos.value + 4;
+//       return value;
+//     }
+
+//     int addBidVolume() {
+//       int value = encrypt.getLong(buf, readPos.value);
+//       readPos.value = readPos.value + 8;
+//       return value;
+//     }
+
+//     int addBidNqueue() {
+//       int value = encrypt.encrypt4(buf, readPos.value);
+//       readPos.value = readPos.value + 4;
+//       return value;
+//     }
+
+//     addDataB.add(
+//       Bid()
+//         ..bidPrice = addBidPrice()
+//         ..bidVolume = addBidVolume()
+//         ..bidNqueue = addBidNqueue(),
+//     );
+//   }
+//   ValueNotifier<int> Arf =
+//       ValueNotifier(Encrypt().encrypt4(buf, readPos.value));
+//   readPos.value = readPos.value + 4;
+//   for (int x = 0; x < Arf.value; x++) {
+//     var e = Encrypt();
+//     int OP() {
+//       int v = e.encrypt4(buf, readPos.value);
+//       readPos.value = readPos.value + 4;
+//       return v;
+//     }
+
+//     int OV() {
+//       int v = e.getLong(buf, readPos.value);
+//       readPos.value = readPos.value + 8;
+//       return v;
+//     }
+
+//     int ON() {
+//       int v = e.encrypt4(buf, readPos.value);
+//       readPos.value = readPos.value + 4;
+//       return v;
+//     }
+
+//     addDataF.add(
+//       Offer()
+//         ..offerPrice = OP()
+//         ..offerVolume = OV()
+//         ..offerNqueue = ON(),
+//     );
+//   }
+
+//   final List<OrderBookModel> listD = [
+//     OrderBookModel(
+//       stockCL: scl.value,
+//       stockC: sc.value.toString(),
+//       boardL: bl.value.toInt(),
+//       board: bls.value.toString(),
+//       arrayOFBID: Ar.value.toInt(),
+//       arrayOBID: addDataB.toList(),
+//       arrayOFOffer: Arf.value.toInt(),
+//       arrayOOffer: addDataF.toList(),
+//     ),
+//   ].toList();
+
+//   OrderBookModel(
+//     stockCL: scl.value,
+//     stockC: sc.value.toString(),
+//     boardL: bl.value.toInt(),
+//     board: bls.value.toString(),
+//     arrayOFBID: Ar.value.toInt(),
+//     arrayOBID: addDataB.toList(),
+//     arrayOFOffer: Arf.value.toInt(),
+//     arrayOOffer: addDataF.toList(),
+//   ).toJson();
+
+//   return listD;
+
+//   // listD.add(
+//   //   OrderBookModel(
+//   //     stockCL: SCL().toInt(),
+//   //     stockC: SC().toString(),
+//   //     boardL: BL().toInt(),
+//   //     board: BOARD().toString(),
+//   //     arrayOFBID: arrayOfBid().toInt(),
+//   //     arrayOBID: addDataB,
+//   //     arrayOFOffer: arrayOfOffer().toInt(),
+//   //     arrayOOffer: addDataF,
+//   //   ),
+//   // );
+
+//   // return OrderbookBloc()..orderbook = list.toList();
+
+//   // return add.toJson();
+// }
+
+
+  // Exchange ex = await channel.exchange(
+  //     Constans.EXCHANGE_NAME_REQUEST, Constans.EXCHANGE_TYPE_REQUEST);
+  // await channel
+  //     .queue(Constans.QUEUE_NAME_REQUEST)
+  //     .then((Queue v) => v.bind(ex, "1!1"));
+  // ex.publish(createStockListRequest("1!1", 1), "1!1");
+
+  // Queue qu = await channel.queue("").then((Queue v) => v.bind(ex, "1!1"));
+  // String nq = qu.name.toString();
+  // Consumer consumer = await qu.consume(consumerTag: nq);
+  // consumer.listen((AmqpMessage M) {
+  //   getData(Uint8List.view(M.payload!.buffer), M.routingKey.toString());
+  // });
+
+
+  
+  // int getLong(Uint8List bytes, int offset) {
+  //   int value = (bytes[offset] << 56) |
+  //       (bytes[offset + 1] << 48) |
+  //       (bytes[offset + 2] << 40) |
+  //       (bytes[offset + 3] << 32) |
+  //       (bytes[offset + 4] << 24) |
+  //       (bytes[offset + 5] << 16) |
+  //       (bytes[offset + 6] << 8) |
+  //       bytes[offset + 7];
+  //   return value;
+  // }
+
+
+// Connact({required String routtingKey}) async {
+//   Client client = Client(settings: Constans.SETTING_CONN);
+//   Channel channel = await client.channel();
+//   Exchange exchange = await channel.exchange(
+//     Constans.EXCHANGE_NAME_REALTIME,
+//     Constans.EXCHANGE_TYPE_REALTIME,
+//   );
+//   await channel.queue(Constans.QUEUE_NAME_REALTIME).then(
+//         (Queue queue) => queue.bind(exchange, routtingKey),
+//       );
+//   await channel
+//       .queue(Constans.QUEUE_NAME_REALTIME)
+//       .then(
+//         (Queue queue) => queue.bind(exchange, Constans.ROUTING_KEY),
+//       )
+//       .then(
+//         (Queue queue) => queue.consume(consumerTag: queue.name.toString()).then(
+//               (Consumer consumer) => consumer.listen(
+//                 (AmqpMessage M) {
+//                   if (M.payload == null || M.routingKey!.endsWith('..')) {
+//                     print('DARI YOGA CONNACT_SERVER.dart');
+//                   } else {
+//                     Uint8List UI = Uint8List.view(M.payload!.buffer);
+//                     getData(
+//                       UI,
+//                       M.routingKey.toString(),
+//                     );
+//                   }
+//                   // PackageHeaders(buf: UI);
+//                 },
+//               ),
+//             ),
+//       );
+//   print("Connact To Server");
+// }
+
+
+    // ModelSUB? data;
+    // if (listSub.isNotEmpty) {
+    //   for (var i in listSub) {
+    //     if (i.routingKey == model.routingKey) {
+    //       if (model.isRun == false) {
+    //         i.isRun = model.isRun;
+    //         data = i;
+    //         break;
+    //       }
+    //       i.status = i.status! + 1;
+    //       data = i;
+    //       break;
+    //     }
+    //   }
+    // }
+
+    // if (data == null) {
+    //   model.status = model.status! + 1;
+    //   listSub.add(model);
+    // } else {
+    //   int index = listSub.indexOf(data);
+    //   listSub[index] = data;
+    // }
+
+
+    
+  // void cekStatus(ModelSUB model) async {
+  //   if (getConnectionsController.onReadys.value == false) return;
+  //   try {
+  //     Queue getQueueRealtime = getConnectionsController.queueReal;
+  //     Exchange getExchangeRealtime = getConnectionsController.exchangeReal;
+  //     bool dataAlreadyExists = false;
+  //     ModelSUB? data;
+
+  //     for (int i = 0; i < listSub.length; i++) {
+  //       if (listSub[i].routingKey == model.routingKey) {
+  //         dataAlreadyExists = !dataAlreadyExists;
+
+  //         if (listSub[i].status == 0 || listSub[i].isRun == false) {
+  //           listSub[i].status = listSub[i].status!.toInt() - 1;
+  //           listSub[i].isRun = true;
+  //           print("STATUS: ${listSub[i].status!}, ${listSub[i].routingKey}");
+  //           print("UNBID SCREENS ${listSub[i].status} ${listSub[i].isRun}");
+  //           if (listSub[i].status!.toInt() <= 0) {
+  //             await getQueueRealtime.unbind(
+  //               getExchangeRealtime,
+  //               listSub[i].routingKey.toString(),
+  //             );
+  //             // getQueueRealtime.delete();
+  //             listSub.removeAt(i);
+  //             print("UNBID REMOVE");
+  //           }
+  //         } else if (listSub[i].status!.toInt() >= 1 &&
+  //             listSub[i].isRun == true) {
+  //           print("STATUS: ${listSub[i].status!}, ${listSub[i].routingKey}");
+  //           print("DAH ADAL");
+  //         } else {
+  //           data = listSub[i];
+  //           print('DATA: ${data.routingKey}');
+  //         }
+  //       }
+  //     }
+
+  //     if (dataAlreadyExists == true && data != null) {
+  //       int index = listSub.indexOf(data);
+  //       data.isRun = true;
+  //       data.massage = model.massage;
+  //       listSub[index] = data;
+  //       await getQueueRealtime.bind(
+  //           getExchangeRealtime, data.routingKey.toString());
+  //       Consumer consumer = await getQueueRealtime.consume(
+  //         noAck: true,
+  //       );
+  //       consumer.listen(
+  //         (AmqpMessage M) {
+  //           print(M.routingKey);
+  //           Uint8List UI = Uint8List.view(M.payload!.buffer);
+  //           if (M.payload!.isEmpty ||
+  //               M.routingKey!.endsWith('..') ||
+  //               M.payload!.length < 18) {
+  //             print('DARI YOGA CONNACT_SERVER.dart');
+  //           } else {
+  //             PackageHeaders(buf: UI, routingKey: M.routingKey.toString());
+  //           }
+  //         },
+  //       );
+  //       if (model.massage != null) getRequest.addMassage(model.massage!);
+  //       print("BIND");
+  //     }
+  //   } catch (e) {
+  //     print("ERROR DI BIND $e");
+  //     getConnectionsController.initializeConnections();
+  //   }
+  // }

@@ -1,0 +1,4 @@
+enum Trading {
+  seeAll,
+  fokus;
+}
